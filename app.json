@@ -1,0 +1,49 @@
+{
+  "expo": {
+    "name": "Apunto",
+    "slug": "apunto",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "icon": "./main_logo.png",
+    "splash": {
+      "image": "./main_logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#f8fafc"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.documentaianalyzer",
+      "splash": {
+        "image": "./main_logo.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#f8fafc"
+      }
+    },
+    "android": {
+      "package": "com.documentaianalyzer",
+      "adaptiveIcon": {
+        "foregroundImage": "./main_logo.png",
+        "backgroundColor": "#f8fafc"
+      },
+      "splash": {
+        "image": "./main_logo.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#f8fafc"
+      }
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "La app necesita acceso a tus fotos para analizar documentos."
+        }
+      ],
+      "expo-asset"
+    ],
+    "newArchEnabled": true
+  }
+}

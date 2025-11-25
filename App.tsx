@@ -178,7 +178,9 @@ export default function App() {
 
   const loadHistory = async () => {
     try {
-      const historyData = await HistoryService.getHistory();
+      // TODO: Obtener userId si tienes autenticación
+      const userId = undefined; // Puedes obtener esto de tu sistema de autenticación
+      const historyData = await HistoryService.getHistory(userId);
       setHistory(historyData || []);
     } catch (error) {
       setHistory([]);
@@ -216,7 +218,9 @@ export default function App() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await HistoryService.deleteHistoryItem(id);
+              // TODO: Obtener userId si tienes autenticación
+              const userId = undefined; // Puedes obtener esto de tu sistema de autenticación
+              await HistoryService.deleteHistoryItem(id, userId);
               await loadHistory();
             } catch {
               // Ignorar errores

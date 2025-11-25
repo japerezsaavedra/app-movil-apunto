@@ -1,16 +1,17 @@
 # Apunto - Análisis de Documentos y Apuntes con IA
 
-Aplicación móvil React Native que analiza documentos y apuntes académicos de cualquier tipo usando Google Vision API (OCR) y Google Gemini (LLM) para extraer y entender información de documentos.
+Aplicación móvil React Native que analiza documentos y apuntes de cualquier tipo usando Azure Document Intelligence (OCR) y Azure OpenAI GPT-4o (LLM) para extraer y entender información de documentos.
 
 ## Características Principales
 
-- ✅ Análisis de **apuntes académicos de cualquier materia** (historia, literatura, matemáticas, ciencias, arte, etc.)
+- ✅ Análisis de **apuntes de cualquier materia** (historia, literatura, matemáticas, ciencias, arte, etc.)
 - ✅ Detección de **ecuaciones y fórmulas escritas a mano** (si están presentes)
 - ✅ Extracción de **conceptos principales** y temas tratados
 - ✅ Identificación de **materias académicas** y áreas de conocimiento
 - ✅ Análisis de documentos administrativos (facturas, recetas, citas, etc.)
-- ✅ Historial local de análisis
-- ✅ Interfaz intuitiva y fácil de usar
+- ✅ **Historial persistente** con sincronización backend (PostgreSQL)
+- ✅ **Detección de conectividad** y manejo robusto de errores de red
+- ✅ Interfaz intuitiva y fácil de usar con splash screen
 
 ## Arquitectura del Sistema
 
@@ -21,10 +22,12 @@ Aplicación móvil React Native que analiza documentos y apuntes académicos de 
 │                 │
 │ 1. Tomar foto   │
 │ 2. Descripción  │
+│ 3. Historial    │
 └────────┬────────┘
          │
          │ POST /api/analyze
-         │ { image, description }
+         │ GET /api/history
+         │ DELETE /api/history/:id
          ▼
 ┌─────────────────┐
 │   Backend API   │
@@ -32,24 +35,25 @@ Aplicación móvil React Native que analiza documentos y apuntes académicos de 
 │   Express)      │
 │                 │
 │ 1. Recibe img   │
-│ 2. OCR (Google) │
-│ 3. LLM (Gemini) │
+│ 2. OCR (Azure)  │
+│ 3. LLM (GPT-4o) │
+│ 4. PostgreSQL   │
 └────────┬────────┘
          │
-         ├─────────────────┐
-         │                 │
-         ▼                 ▼
-┌─────────────────┐  ┌─────────────────┐
-│ Google Vision   │  │  Google Gemini  │
-│      API        │  │   (LLM)         │
-│                 │  │                 │
-│ - OCR           │  │ - Análisis      │
-│ - Extracción    │  │ - Resumen       │
-│   de texto      │  │ - Etiquetas     │
-│ - Ecuaciones    │  │ - Conceptos     │
-│   escritas      │  │ - Entidades     │
-│   a mano        │  │ - Materias      │
-└─────────────────┘  └─────────────────┘
+         ├─────────────────┬─────────────────┐
+         │                 │                 │
+         ▼                 ▼                 ▼
+┌─────────────────┐  ┌─────────────────┐  ┌──────────┐
+│ Azure Document  │  │  Azure OpenAI   │  │PostgreSQL│
+│  Intelligence   │  │   (GPT-4o)      │  │ Database │
+│                 │  │                 │  │          │
+│ - OCR           │  │ - Análisis      │  │- History │
+│ - Extracción    │  │ - Resumen       │  │- Users   │
+│   de texto      │  │ - Etiquetas     │  │          │
+│ - Ecuaciones    │  │ - Conceptos     │  │          │
+│   escritas      │  │ - Entidades     │  │          │
+│   a mano        │  │ - Materias      │  │          │
+└─────────────────┘  └─────────────────┘  └──────────┘
 ```
 
 ## Flujo Completo
@@ -58,19 +62,20 @@ Aplicación móvil React Native que analiza documentos y apuntes académicos de 
    - Usuario toma foto del documento/apunte o selecciona de galería
    - Usuario ingresa descripción/contexto (ej: "Apunte de historia sobre la Revolución Francesa")
    - App convierte imagen a base64
+   - App verifica conectividad de red antes de enviar
    - App envía imagen (base64) + descripción al backend
 
 ### 2. **Backend API (Node.js/Express)**
    - Recibe imagen en formato base64 y descripción
    - Valida formato y tamaño de imagen
-   - **Paso 1 - OCR**: Usa Google Vision API (o Tesseract.js) para extraer texto
+   - **Paso 1 - OCR**: Usa Azure Document Intelligence para extraer texto
      - Detecta texto escrito a mano o impreso
      - Extrae ecuaciones y fórmulas si están presentes
      - Obtiene texto completo del documento
-   - **Paso 2 - Análisis**: Usa Google Gemini con:
+   - **Paso 2 - Análisis**: Usa Azure OpenAI (GPT-4o) con:
      - Texto extraído (OCR)
      - Descripción del usuario (contexto)
-   - Gemini genera análisis comprensivo:
+   - GPT-4o genera análisis comprensivo:
      - Identifica el tipo de documento (apunte, factura, nota, etc.)
      - Detecta la materia o área de conocimiento (si es un apunte)
      - Extrae conceptos principales y temas tratados
@@ -78,6 +83,7 @@ Aplicación móvil React Native que analiza documentos y apuntes académicos de 
      - Extrae entidades estructuradas (fechas, nombres, conceptos, etc.)
      - Genera puntos clave del documento
      - Crea resumen comprensivo
+   - **Paso 3 - Persistencia**: Guarda el análisis en PostgreSQL
    - Retorna resultado completo a la app móvil
 
 ### 3. **App Móvil (Resultado)**
@@ -90,7 +96,8 @@ Aplicación móvil React Native que analiza documentos y apuntes académicos de 
      - Comprensión del documento
    - Muestra texto extraído (OCR)
    - Muestra resumen completo
-   - Guarda en historial local
+   - Guarda en historial local (AsyncStorage) como respaldo
+   - Sincroniza con backend para historial persistente
 
 ## Tipos de Documentos Soportados
 
@@ -118,63 +125,84 @@ El sistema puede analizar apuntes de **cualquier materia**:
 ## Stack Tecnológico
 
 ### Frontend (Móvil)
-- **React Native** con Expo
-- **TypeScript**
-- **expo-image-picker**: Captura de fotos y selección de galería
-- **expo-file-system**: Manejo de archivos y conversión a base64
-- **AsyncStorage**: Almacenamiento local del historial
+- **React Native** 0.76.9 con Expo ~52.0.0
+- **TypeScript** ~5.3.3
+- **expo-image-picker** ~16.0.0: Captura de fotos y selección de galería
+- **expo-file-system** ~18.0.0: Manejo de archivos y conversión a base64
+- **@react-native-async-storage/async-storage** 1.23.1: Almacenamiento local del historial
+- **@react-native-community/netinfo** ^11.4.1: Detección de conectividad de red
+- **@expo/vector-icons** ^15.0.3: Iconos Material Icons
 
-**Nota importante**: La app móvil NO se conecta directamente a servicios de Google. Solo se conecta al backend mediante API REST.
+**Nota importante**: La app móvil NO se conecta directamente a servicios de Azure. Solo se conecta al backend mediante API REST.
 
 ### Backend
 - **Node.js** + **Express**
 - **TypeScript**
-- **@google/generative-ai**: Google Gemini SDK (para análisis de texto)
-- **tesseract.js**: OCR alternativo (gratis, local)
 - **dotenv**: Variables de entorno
 - **cors**: Configuración CORS
+- **pg**: Cliente PostgreSQL para persistencia de datos
+- **multer**: Manejo de uploads de imágenes
 
-**Toda la lógica de conexión a servicios de Google está en el backend:**
-- El backend se conecta a **Google Vision API** para OCR
-- El backend se conecta a **Google Gemini** para análisis de texto
+**Toda la lógica de conexión a servicios de Azure está en el backend:**
+- El backend se conecta a **Azure Document Intelligence** para OCR
+- El backend se conecta a **Azure OpenAI (GPT-4o)** para análisis de texto
+- El backend gestiona la persistencia en **PostgreSQL**
 - La app móvil solo envía imágenes y recibe resultados
 
-### Servicios Google Cloud (usados por el backend)
-- **Google Vision API**: OCR y extracción de texto
-  - Tier gratuito: 1,000 unidades/mes
-  - Después: $1.50 por cada 1,000 unidades
+### Servicios Azure (usados por el backend)
+- **Azure Document Intelligence**: OCR y extracción de texto
+  - Modelo: prebuilt-read, API version 2023-07-31
   - Excelente para texto escrito a mano y ecuaciones
-  - Se usa cuando `USE_GOOGLE_VISION_OCR=true` en el backend
-- **Google Gemini**: LLM para análisis y comprensión
-  - Tier gratuito: 60 requests/minuto, 1,500 requests/día
+  - Procesamiento asíncrono con polling
+  - Región recomendada: East US 2
+- **Azure OpenAI (GPT-4o)**: LLM para análisis y comprensión
+  - Desplegado via Azure AI Foundry
+  - Endpoint: services.ai.azure.com
   - Siempre se usa para el análisis de texto
   - Capaz de analizar apuntes de cualquier materia
+  - Respuestas siempre en español
+
+### Base de Datos
+- **PostgreSQL**: Almacenamiento persistente del historial
+  - Tablas: `users`, `analysis_history`
+  - Soporte para conexiones cloud (Supabase, Neon, etc.)
+  - SSL habilitado para producción
 
 ## Estructura del Proyecto
 
 ```
 mobile-app/
-├── App.tsx                    # Componente principal de la app
-├── types.ts                   # Tipos TypeScript (AnalysisResult, HistoryItem, etc.)
+├── App.tsx                    # Componente principal con navegación y estados
+├── types.ts                   # Tipos TypeScript (AnalysisResult, HistoryItem, AppState)
 ├── services/
-│   ├── apiService.ts          # Servicio para llamar al backend (única conexión externa)
-│   └── historyService.ts      # Servicio para guardar/cargar historial local
-├── package.json
+│   ├── apiService.ts          # Servicio API con manejo de errores de red
+│   │                          # - analyzeDocument()
+│   │                          # - getHistoryFromBackend()
+│   │                          # - deleteHistoryItemFromBackend()
+│   └── historyService.ts      # Servicio de historial local (AsyncStorage)
+├── main_logo.png              # Logo de la aplicación
+├── app.json                   # Configuración de Expo
+├── package.json               # Dependencias del proyecto
+├── tsconfig.json              # Configuración de TypeScript
 └── README.md
 
 backend/
 ├── src/
 │   ├── server.ts              # Servidor Express principal
 │   ├── routes/
-│   │   └── analyze.ts         # Ruta POST /api/analyze
+│   │   ├── analyze.ts         # POST /api/analyze
+│   │   └── history.ts         # GET /api/history, DELETE /api/history/:id
 │   ├── services/
-│   │   ├── ocrService.ts      # Servicio OCR (Google Vision o Tesseract.js)
-│   │   └── geminiService.ts   # Servicio Google Gemini
+│   │   ├── ocrService.ts          # Azure Document Intelligence
+│   │   ├── azureOpenAIService.ts  # Azure OpenAI (GPT-4o)
+│   │   ├── database.ts            # Conexión a PostgreSQL
+│   │   └── historyService.ts      # CRUD de historial en DB
 │   └── utils/
 │       └── imageConverter.ts   # Utilidades para imágenes
 ├── package.json
 ├── .env                       # Variables de entorno (no versionado)
 ├── env.example                # Ejemplo de variables de entorno
+├── DEPLOY.md                  # Guía de despliegue en Azure
 └── README.md
 ```
 
@@ -185,17 +213,21 @@ backend/
 Crea un archivo `.env` en la carpeta `backend/`:
 
 ```env
-# Google Gemini (LLM para análisis de documentos)
-# Obtén tu API key en: https://aistudio.google.com/apikey
-GEMINI_API_KEY=tu-gemini-api-key
+# Azure Document Intelligence (OCR)
+# Región recomendada: East US 2 (compatible con suscripciones Student)
+AZURE_DOC_ENDPOINT=https://tu-instancia.cognitiveservices.azure.com/
+AZURE_DOC_KEY=tu-clave-de-document-intelligence
 
-# OCR: Por defecto se usa Tesseract.js (gratis, ilimitado, local)
-# 
-# Alternativa: Google Vision API (RECOMENDADO para apuntes escritos a mano)
-# - Tier gratuito: 1,000 unidades/mes
-# - Después: $1.50 por cada 1,000 unidades
-# - Para usar Google Vision API, descomenta la siguiente línea:
-# USE_GOOGLE_VISION_OCR=true
+# Azure OpenAI (LLM - GPT-4o via Foundry)
+# Región recomendada: East US 2 (compatible con suscripciones Student)
+AZURE_OPENAI_ENDPOINT=https://tu-instancia.services.ai.azure.com/
+AZURE_OPENAI_KEY=tu-clave-de-openai
+AZURE_OPENAI_DEPLOYMENT=gpt-4o
+
+# PostgreSQL Database (para historial)
+# Formato: postgresql://usuario:password@host:puerto/database
+DATABASE_URL=postgresql://usuario:password@host:puerto/database
+DATABASE_SSL=false  # true para conexiones cloud (Supabase, Neon, etc.)
 
 # Servidor
 PORT=3000
@@ -217,7 +249,7 @@ const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/a
 
 **Para producción:**
 ```typescript
-const API_BASE_URL = 'https://tu-backend.herokuapp.com/api';
+const API_BASE_URL = 'https://apunto-backend.azurewebsites.net/api';
 ```
 
 ## Instalación y Ejecución
@@ -227,8 +259,9 @@ const API_BASE_URL = 'https://tu-backend.herokuapp.com/api';
 ```bash
 cd backend
 npm install
-npm run dev  # Desarrollo
-npm start    # Producción
+npm run dev  # Desarrollo con tsx watch
+npm run build  # Compilar TypeScript
+npm start    # Producción (requiere build previo)
 ```
 
 ### App Móvil
@@ -236,12 +269,16 @@ npm start    # Producción
 ```bash
 cd mobile-app
 npm install
-npm start
+npm start    # Inicia Expo Dev Server
+npm run android  # Ejecuta en Android
+npm run ios      # Ejecuta en iOS
 ```
 
-## Endpoint del Backend
+## API Endpoints del Backend
 
 ### POST `/api/analyze`
+
+Analiza un documento usando OCR y LLM.
 
 **Request:**
 ```json
@@ -301,16 +338,76 @@ npm start
 }
 ```
 
+### GET `/api/history`
+
+Obtiene el historial de análisis del usuario.
+
+**Headers:**
+- `x-user-id` (opcional): ID del usuario
+
+**Query Parameters:**
+- `limit` (opcional, default: 50): Número de resultados
+- `offset` (opcional, default: 0): Offset para paginación
+
+**Response:**
+```json
+{
+  "history": [
+    {
+      "id": "123",
+      "imageUri": "...",
+      "description": "Apunte de historia",
+      "extractedText": "...",
+      "summary": "...",
+      "label": "Apunte de Historia",
+      "timestamp": "2024-11-25T19:00:00.000Z"
+    }
+  ],
+  "pagination": {
+    "limit": 50,
+    "offset": 0,
+    "total": 1
+  }
+}
+```
+
+### DELETE `/api/history/:id`
+
+Elimina un elemento del historial.
+
+**Headers:**
+- `x-user-id` (opcional): ID del usuario
+
+**Response:**
+```json
+{
+  "message": "Análisis eliminado correctamente"
+}
+```
+
 ## Características de la App
 
 ### Funcionalidades
-- ✅ Captura de fotos con cámara
+- ✅ **Splash Screen** con logo y animación de carga
+- ✅ Captura de fotos con cámara (con fallback a galería)
 - ✅ Selección de imágenes de galería
 - ✅ Ingreso de descripción/contexto del documento
+- ✅ **Detección de conectividad** antes de enviar solicitudes
+- ✅ **Manejo robusto de errores** de red (timeout, sin internet, servidor no disponible)
 - ✅ Análisis completo del documento o apunte
 - ✅ Visualización de información estructurada
-- ✅ Historial local de análisis
+- ✅ **Historial persistente** sincronizado con backend
+- ✅ **Historial local** como respaldo (AsyncStorage)
 - ✅ Eliminación de elementos del historial
+- ✅ **Navegación inferior** (Bottom Navigation) entre Inicio e Historial
+
+### Estados de la App
+- **CAMERA**: Pantalla inicial para capturar/seleccionar imagen
+- **DESCRIPTION**: Ingreso de descripción del documento
+- **PROCESSING**: Procesamiento con indicador de carga
+- **RESULTS**: Visualización de resultados del análisis
+- **HISTORY**: Listado del historial de análisis
+- **ERROR**: Pantalla de error con opciones de reintento
 
 ### Información Mostrada
 - **Etiqueta Principal**: Categoría principal del documento (ej: "Apunte de Historia")
@@ -326,6 +423,14 @@ npm start
 - **Texto Extraído**: Texto completo extraído por OCR
 - **Resumen**: Resumen comprensivo del documento
 
+### Manejo de Errores
+La app detecta y muestra mensajes específicos para:
+- **NO_INTERNET**: Sin conexión a internet
+- **TIMEOUT**: Solicitud tardó demasiado tiempo (60s)
+- **API_UNREACHABLE**: No se puede conectar con el servidor
+- **ERROR_SERVER**: Error interno del servidor (500)
+- **SERVICE_UNAVAILABLE**: Servicio no disponible (503)
+
 ## Seguridad
 
 - API keys almacenadas en variables de entorno (backend)
@@ -333,30 +438,63 @@ npm start
 - CORS configurado
 - NO exponer API keys en el código del cliente
 - Las imágenes se envían al backend, nunca directamente a servicios externos
+- Conexión SSL a PostgreSQL en producción
+- Service Principal para despliegue en Azure (no credenciales básicas)
+
+## Despliegue
+
+### Backend en Azure App Service
+
+El backend se puede desplegar en Azure App Service usando GitHub Actions. Ver `backend/DEPLOY.md` para instrucciones detalladas.
+
+**Pasos principales:**
+1. Crear App Service en Azure (Node.js 20 LTS)
+2. Crear Service Principal para GitHub Actions
+3. Configurar GitHub Secrets (`AZURE_CREDENTIALS`)
+4. Configurar variables de entorno en Azure Portal
+5. Push a `main` o `master` activa el despliegue automático
+
+**Variables de entorno requeridas en Azure:**
+- `AZURE_DOC_ENDPOINT`
+- `AZURE_DOC_KEY`
+- `AZURE_OPENAI_ENDPOINT`
+- `AZURE_OPENAI_KEY`
+- `AZURE_OPENAI_DEPLOYMENT`
+- `DATABASE_URL`
+- `DATABASE_SSL=true`
+- `CORS_ORIGIN`
+
+### App Móvil
+
+La app móvil se puede distribuir mediante:
+- **Expo Go**: Para testing rápido
+- **EAS Build**: Para builds de producción (iOS/Android)
+- **App Store / Google Play**: Distribución pública
 
 ## Costos
 
-### Google Vision API (OCR - Opcional)
-- **Gratis**: 1,000 unidades/mes (primeros 1,000 documentos)
-- Después: $1.50 por cada 1,000 unidades
+### Azure Document Intelligence (OCR)
+- **Tier gratuito**: Consulta los límites actuales en Azure
+- Después: Consulta precios en el [Portal de Azure](https://azure.microsoft.com/pricing/details/ai-document-intelligence/)
+- Región recomendada: **East US 2** (compatible con suscripciones Student)
 - **Recomendado** para apuntes escritos a mano y ecuaciones
 
-### Google Gemini (LLM)
-- **Gratis**: 60 requests por minuto, 1,500 requests por día
-- Después: Consulta precios en Google AI Studio
+### Azure OpenAI (GPT-4o)
+- **Suscripción Student**: Créditos gratuitos disponibles
+- Después: Consulta precios en el [Portal de Azure](https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/)
+- Región recomendada: **East US 2** (compatible con suscripciones Student)
 
-### Alternativa Gratuita (Tesseract.js)
-- **Completamente gratis**: Sin límites
-- Funciona localmente en el servidor
-- No requiere API keys
-- Configuración: `USE_GOOGLE_VISION_OCR=false` (por defecto)
+### PostgreSQL
+- **Supabase**: Tier gratuito disponible
+- **Neon**: Tier gratuito disponible
+- **Azure Database for PostgreSQL**: Consulta precios
 
 ## Testing
 
 ### Desarrollo Local
-- Backend: `http://localhost:3000`
-- App móvil: Usar emulador o dispositivo físico
-- Configurar CORS para permitir conexiones desde el emulador
+1. Iniciar backend: `cd backend && npm run dev`
+2. Iniciar app móvil: `cd mobile-app && npm start`
+3. Configurar URL del backend en `apiService.ts`
 
 ### Emulador Android
 - URL: `http://10.0.2.2:3000/api` (localhost del host)
@@ -365,6 +503,10 @@ npm start
 ### iOS Simulator
 - URL: `http://localhost:3000/api`
 
+### Dispositivo Físico
+- Asegúrate de estar en la misma red que tu máquina
+- Usa la IP local de tu máquina: `http://192.168.x.x:3000/api`
+
 ## Troubleshooting
 
 ### Error: CORS
@@ -372,22 +514,34 @@ npm start
 - En desarrollo, usar `*` temporalmente
 - Verificar que la URL del backend sea correcta en `apiService.ts`
 
-### Error: API Key inválida
-- Verificar que `GEMINI_API_KEY` en `.env` sea correcta
-- Verificar que la API key tenga permisos para Vision API y Gemini
+### Error: Credenciales de Azure inválidas
+- Verificar que `AZURE_DOC_ENDPOINT` y `AZURE_DOC_KEY` estén configurados
+- Verificar que `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_KEY` y `AZURE_OPENAI_DEPLOYMENT` estén configurados
+- Verificar que las credenciales sean válidas en el Portal de Azure
+
+### Error: Database connection failed
+- Verificar que `DATABASE_URL` esté correctamente configurado
+- Asegúrate de que `DATABASE_SSL=true` para conexiones cloud
+- Verificar que el firewall de PostgreSQL permita conexiones desde tu IP/Azure
 
 ### Error: Imagen no se procesa
 - Verificar formato de imagen (JPEG, PNG)
 - Verificar tamaño máximo (10MB)
 - Verificar encoding base64
 - Verificar que la imagen contenga texto legible
-- Para texto escrito a mano, usar Google Vision API para mejor precisión
+- Azure Document Intelligence funciona muy bien con texto escrito a mano
 
 ### Error: No se puede conectar al backend
 - Verificar que el backend esté corriendo
 - Verificar la URL en `apiService.ts`
 - Verificar que el puerto sea correcto (3000 por defecto)
 - En dispositivo físico, usar IP de la máquina, no localhost
+- Verificar conectividad de red
+
+### Error: Timeout
+- Verificar conexión a internet
+- El timeout está configurado a 60 segundos para análisis
+- Imágenes muy grandes pueden tardar más en procesarse
 
 ## Casos de Uso
 
@@ -396,34 +550,43 @@ npm start
 - Analiza conceptos principales y temas tratados
 - Identifica la materia automáticamente
 - Extrae ecuaciones y fórmulas si están presentes
+- Guarda en historial para consulta posterior
 
 ### Documentos Administrativos
 - Digitaliza facturas y recibos
 - Extrae información estructurada (montos, fechas, etc.)
 - Organiza documentos por categorías
+- Mantiene historial de documentos procesados
 
 ### Notas Personales
 - Digitaliza notas rápidas
 - Extrae recordatorios y tareas
 - Organiza información personal
+- Acceso rápido desde el historial
 
 ## Próximos Pasos
 
-1. ✅ Backend configurado con Google Vision OCR y Gemini
+1. ✅ Backend configurado con Azure Document Intelligence y Azure OpenAI
 2. ✅ App móvil conectada al backend real
 3. ✅ Eliminados todos los mockups
 4. ✅ Soporte para apuntes de cualquier materia
 5. ✅ Detección de ecuaciones escritas a mano
-6. ⏳ Testing completo
-7. ⏳ Optimización de rendimiento
-8. ⏳ Despliegue en producción
+6. ✅ Historial persistente con PostgreSQL
+7. ✅ Manejo robusto de errores de red
+8. ✅ Despliegue automatizado en Azure
+9. ⏳ Testing completo end-to-end
+10. ⏳ Optimización de rendimiento
+11. ⏳ Autenticación de usuarios
+12. ⏳ Build de producción para App Store/Google Play
 
 ## Recursos
 
-- [Google Vision API Docs](https://cloud.google.com/vision/docs)
-- [Google Gemini API Docs](https://ai.google.dev/docs)
+- [Azure Document Intelligence Docs](https://learn.microsoft.com/azure/ai-services/document-intelligence)
+- [Azure OpenAI Docs](https://learn.microsoft.com/azure/ai-services/openai/)
 - [React Native Expo Docs](https://docs.expo.dev/)
-- [Tesseract.js Docs](https://tesseract.projectnaptha.com/)
+- [Portal de Azure](https://portal.azure.com)
+- [PostgreSQL Docs](https://www.postgresql.org/docs/)
+- [Expo Application Services (EAS)](https://docs.expo.dev/eas/)
 
 ## Licencia
 

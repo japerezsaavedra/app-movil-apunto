@@ -3,10 +3,10 @@ import NetInfo from '@react-native-community/netinfo';
 import { AnalysisResult } from '../types';
 
 // URL del backend - ajustar según el entorno
-// Para desarrollo local con emulador Android: http://10.0.2.2:3000
-// Para desarrollo local con dispositivo físico: http://TU_IP_LOCAL:3000
-// Para producción: https://tu-backend.azurewebsites.net
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
+// Para desarrollo local con emulador Android: http://10.0.2.2:3000/api
+// Para desarrollo local con dispositivo físico: http://TU_IP_LOCAL:3000/api
+// Para producción: http://backendapunto-hvdbgvhcgthwbjbh.chilecentral-01.azurewebsites.net/api
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://backendapunto-hvdbgvhcgthwbjbh.chilecentral-01.azurewebsites.net/api';
 
 /**
  * Verifica si hay conexión a internet
@@ -169,137 +169,4 @@ export const analyzeDocument = async (
   }
 };
 
-/**
- * Obtiene el historial de análisis del backend
- */
-export const getHistoryFromBackend = async (
-  userId?: string,
-  limit: number = 50,
-  offset: number = 0
-): Promise<{ history: any[]; pagination: any }> => {
-  try {
-    await checkNetworkConnection();
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 segundos
-
-    try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-
-      if (userId) {
-        headers['x-user-id'] = userId;
-      }
-
-      const params = new URLSearchParams({
-        limit: limit.toString(),
-        offset: offset.toString(),
-      });
-
-      const response = await fetch(`${API_BASE_URL}/history?${params}`, {
-        method: 'GET',
-        headers,
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.message || errorData.error || `Error ${response.status}`;
-        throw new Error(errorMessage);
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (fetchError) {
-      clearTimeout(timeoutId);
-      
-      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
-        throw new Error('TIMEOUT');
-      }
-      throw fetchError;
-    }
-  } catch (error) {
-    console.error('Error obteniendo historial del backend:', error);
-    
-    const errorType = getNetworkErrorMessage(error);
-    
-    switch (errorType) {
-      case 'NO_INTERNET':
-        throw new Error('NO_INTERNET');
-      case 'TIMEOUT':
-        throw new Error('TIMEOUT');
-      case 'API_UNREACHABLE':
-        throw new Error('API_UNREACHABLE');
-      default:
-        if (error instanceof Error) {
-          throw error;
-        }
-        throw new Error('UNKNOWN_ERROR');
-    }
-  }
-};
-
-/**
- * Elimina un análisis del historial en el backend
- */
-export const deleteHistoryItemFromBackend = async (id: string | number, userId?: string): Promise<void> => {
-  try {
-    await checkNetworkConnection();
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
-
-    try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-
-      if (userId) {
-        headers['x-user-id'] = userId;
-      }
-
-      const response = await fetch(`${API_BASE_URL}/history/${id}`, {
-        method: 'DELETE',
-        headers,
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.message || errorData.error || `Error ${response.status}`;
-        throw new Error(errorMessage);
-      }
-    } catch (fetchError) {
-      clearTimeout(timeoutId);
-      
-      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
-        throw new Error('TIMEOUT');
-      }
-      throw fetchError;
-    }
-  } catch (error) {
-    console.error('Error eliminando historial del backend:', error);
-    
-    const errorType = getNetworkErrorMessage(error);
-    
-    switch (errorType) {
-      case 'NO_INTERNET':
-        throw new Error('NO_INTERNET');
-      case 'TIMEOUT':
-        throw new Error('TIMEOUT');
-      case 'API_UNREACHABLE':
-        throw new Error('API_UNREACHABLE');
-      default:
-        if (error instanceof Error) {
-          throw error;
-        }
-        throw new Error('UNKNOWN_ERROR');
-    }
-  }
-};
 

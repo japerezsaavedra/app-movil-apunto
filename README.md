@@ -177,9 +177,11 @@ mobile-app/
 ├── services/
 │   ├── apiService.ts          # Servicio API con manejo de errores de red
 │   │                          # - analyzeDocument()
-│   │                          # - getHistoryFromBackend()
-│   │                          # - deleteHistoryItemFromBackend()
 │   └── historyService.ts      # Servicio de historial local (AsyncStorage)
+│   │                          # - saveToHistory()
+│   │                          # - getHistory()
+│   │                          # - deleteHistoryItem()
+│   │                          # - clearHistory()
 ├── main_logo.png              # Logo de la aplicación
 ├── app.json                   # Configuración de Expo
 ├── package.json               # Dependencias del proyecto

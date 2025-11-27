@@ -2,22 +2,43 @@ import * as FileSystem from 'expo-file-system';
 import NetInfo from '@react-native-community/netinfo';
 import { AnalysisResult } from '../types';
 
-// URL del backend - ajustar según el entorno
-// Para desarrollo local con emulador Android: http://10.0.2.2:3000/api
-// Para desarrollo local con dispositivo físico: http://TU_IP_LOCAL:3000/api
-// Para producción: http://backendapunto-hvdbgvhcgthwbjbh.chilecentral-01.azurewebsites.net/api
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://backendapunto-hvdbgvhcgthwbjbh.chilecentral-01.azurewebsites.net/api';
+// URL del backend - debe configurarse mediante variable de entorno EXPO_PUBLIC_API_URL
+// Ver .env.example para más información
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
+
+if (!API_BASE_URL) {
+  throw new Error(
+    'EXPO_PUBLIC_API_URL no está configurada. Por favor, crea un archivo .env con EXPO_PUBLIC_API_URL configurada. ' +
+    'Ver .env.example para más información.'
+  );
+}
 
 /**
  * Verifica si hay conexión a internet
  */
 const checkNetworkConnection = async (): Promise<void> => {
   const netInfo = await NetInfo.fetch();
+  const networkState = {
+    isConnected: netInfo.isConnected,
+    type: netInfo.type,
+    isInternetReachable: netInfo.isInternetReachable,
+    details: netInfo.details,
+  };
+  console.log('Estado de red:', networkState);
+  
   if (!netInfo.isConnected) {
+    console.error('No hay conexión a internet');
     throw new Error('NO_INTERNET');
   }
   if (netInfo.isConnected && netInfo.type === 'none') {
+    console.error('Tipo de conexión: none');
     throw new Error('NO_INTERNET');
+  }
+  
+  // Verificar si realmente puede alcanzar internet
+  if (netInfo.isConnected && netInfo.isInternetReachable === false) {
+    console.warn('Conectado pero internet no alcanzable');
+    // No lanzar error aquí, intentar de todas formas
   }
 };
 
@@ -92,12 +113,23 @@ export const analyzeDocument = async (
     // Convertir imagen a base64
     const imageBase64 = await imageUriToBase64(imageUri);
 
+    // Log para debugging
+    const requestUrl = `${API_BASE_URL}/analyze`;
+    console.log('=== Iniciando análisis ===');
+    console.log('URL del backend:', requestUrl);
+    console.log('Descripción:', description.trim());
+    console.log('Tamaño de imagen base64:', imageBase64.length, 'caracteres');
+    console.log('Plataforma:', require('react-native').Platform.OS);
+
     // Llamar al backend con timeout
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 segundos
+    const timeoutId = setTimeout(() => {
+      console.warn('Timeout alcanzado después de 90 segundos');
+      controller.abort();
+    }, 90000); // 90 segundos (aumentado para análisis complejos)
 
     try {
-      const response = await fetch(`${API_BASE_URL}/analyze`, {
+      const response = await fetch(requestUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -115,9 +147,18 @@ export const analyzeDocument = async (
         const errorData = await response.json().catch(() => ({}));
         const errorMessage = errorData.message || errorData.error || `Error ${response.status}`;
         
+        console.error('Error del servidor:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorData: errorData,
+        });
+        
         // Errores específicos del servidor
         if (response.status === 500) {
-          throw new Error('ERROR_SERVER');
+          // Incluir más detalles del error para debugging
+          const detailedError = errorData.message || errorData.error || 'Error interno del servidor';
+          console.error('Error 500 detallado:', detailedError);
+          throw new Error(`ERROR_SERVER: ${detailedError}`);
         }
         if (response.status === 503) {
           throw new Error('SERVICE_UNAVAILABLE');
@@ -138,6 +179,23 @@ export const analyzeDocument = async (
     } catch (fetchError) {
       clearTimeout(timeoutId);
       
+      console.error('=== Error en fetch ===');
+      console.error('Error completo:', fetchError);
+      if (fetchError instanceof Error) {
+        console.error('Mensaje de error:', fetchError.message);
+        console.error('Nombre del error:', fetchError.name);
+        console.error('Stack:', fetchError.stack);
+      }
+      
+      // Verificar si es un error de red específico
+      if (fetchError instanceof TypeError) {
+        if (fetchError.message.includes('Network request failed') || 
+            fetchError.message.includes('Failed to fetch')) {
+          console.error('Error de red: No se pudo conectar al servidor');
+          throw new Error('API_UNREACHABLE');
+        }
+      }
+      
       if (fetchError instanceof Error && fetchError.name === 'AbortError') {
         throw new Error('TIMEOUT');
       }
@@ -145,6 +203,11 @@ export const analyzeDocument = async (
     }
   } catch (error) {
     console.error('Error en analyzeDocument:', error);
+    if (error instanceof Error) {
+      console.error('Tipo de error:', error.constructor.name);
+      console.error('Mensaje completo:', error.message);
+      console.error('Stack:', error.stack);
+    }
     
     // Detectar tipo de error de red
     const errorType = getNetworkErrorMessage(error);

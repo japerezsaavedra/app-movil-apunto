@@ -1,0 +1,69 @@
+module.exports = {
+  expo: {
+    name: "Apunto",
+    slug: "apunto",
+    version: "1.0.0",
+    orientation: "portrait",
+    userInterfaceStyle: "automatic",
+    icon: "./main_logo.png",
+    splash: {
+      image: "./main_logo.png",
+      resizeMode: "contain",
+      backgroundColor: "#f8fafc"
+    },
+    assetBundlePatterns: [
+      "**/*"
+    ],
+    ios: {
+      supportsTablet: true,
+      bundleIdentifier: "com.documentaianalyzer",
+      splash: {
+        image: "./main_logo.png",
+        resizeMode: "contain",
+        backgroundColor: "#f8fafc"
+      }
+    },
+    android: {
+      package: "com.documentaianalyzer",
+      adaptiveIcon: {
+        foregroundImage: "./main_logo.png",
+        backgroundColor: "#f8fafc"
+      },
+      splash: {
+        image: "./main_logo.png",
+        resizeMode: "contain",
+        backgroundColor: "#f8fafc"
+      },
+      permissions: [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE"
+      ],
+      usesCleartextTraffic: false
+    },
+    plugins: [
+      [
+        "expo-image-picker",
+        {
+          photosPermission: "La app necesita acceso a tus fotos para analizar documentos."
+        }
+      ],
+      "expo-asset"
+    ],
+    newArchEnabled: false,
+    updates: {
+      enabled: false,
+      fallbackToCacheTimeout: 0,
+      checkAutomatically: "NEVER",
+      url: undefined
+    },
+    runtimeVersion: {
+      policy: "sdkVersion"
+    },
+    extra: {
+      eas: {
+        projectId: undefined
+      }
+    }
+  }
+};
+

@@ -19,6 +19,11 @@ import { analyzeDocument } from './services/apiService';
 import * as HistoryService from './services/historyService';
 
 export default function App() {
+  // Logging mínimo para evitar problemas en dispositivos físicos
+  if (__DEV__) {
+    console.log('App iniciando');
+  }
+  
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [description, setDescription] = useState<string>('');
   const [appState, setAppState] = useState<AppState>(AppState.CAMERA);
@@ -27,14 +32,18 @@ export default function App() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<HistoryItem | null>(null);
   const [showSplash, setShowSplash] = useState<boolean>(true);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Mostrar splash screen al iniciar
   useEffect(() => {
+    // Timeout simple: ocultar splash después de 1.5 segundos
     const timer = setTimeout(() => {
       setShowSplash(false);
-    }, 2000); // 2 segundos
+    }, 1500);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+    };
   }, []);
 
 
@@ -112,8 +121,16 @@ export default function App() {
     }
   };
 
+
   const getErrorMessage = (error: Error): string => {
     const errorMessage = error.message;
+    console.log('Procesando error:', errorMessage);
+
+    // Manejar errores que empiezan con prefijos específicos
+    if (errorMessage.startsWith('ERROR_SERVER:')) {
+      const serverError = errorMessage.replace('ERROR_SERVER:', '').trim();
+      return `Error en el servidor: ${serverError}`;
+    }
 
     switch (errorMessage) {
       case 'NO_INTERNET':
@@ -121,7 +138,7 @@ export default function App() {
       case 'TIMEOUT':
         return 'La solicitud tardó demasiado tiempo. Por favor, verifica tu conexión e intenta nuevamente.';
       case 'API_UNREACHABLE':
-        return 'No se pudo conectar con el servidor. Verifica que el backend esté en ejecución y que la URL sea correcta.';
+        return 'No se pudo conectar con el servidor. Verifica tu conexión a internet y que el backend esté disponible.';
       case 'ERROR_SERVER':
         return 'Error en el servidor. Por favor, intenta nuevamente más tarde.';
       case 'SERVICE_UNAVAILABLE':
@@ -129,7 +146,13 @@ export default function App() {
       case 'UNKNOWN_ERROR':
         return 'Ocurrió un error desconocido. Por favor, intenta nuevamente.';
       default:
-        return `Error al procesar el documento: ${errorMessage}`;
+        // Si el mensaje contiene información útil, mostrarla
+        if (errorMessage.includes('Network request failed') || 
+            errorMessage.includes('Failed to fetch') ||
+            errorMessage.includes('NetworkError')) {
+          return 'No se pudo conectar con el servidor. Verifica tu conexión a internet.';
+        }
+        return `Error: ${errorMessage}`;
     }
   };
 
@@ -139,32 +162,70 @@ export default function App() {
       return;
     }
 
+    setIsProcessing(true);
     setAppState(AppState.PROCESSING);
     setErrorMessage('');
 
+    // Timeout de seguridad: si después de 2 minutos no hay respuesta, mostrar error
+    let safetyTimeoutCleared = false;
+    const safetyTimeout = setTimeout(() => {
+      if (!safetyTimeoutCleared) {
+        console.error('Timeout de seguridad alcanzado');
+        setIsProcessing(false);
+        setErrorMessage('El análisis está tardando demasiado. Por favor, intenta nuevamente.');
+        setAppState(AppState.ERROR);
+      }
+    }, 120000); // 2 minutos
+
     try {
+      console.log('Iniciando análisis...');
       const result = await analyzeDocument(selectedImage, description);
+      console.log('Análisis completado:', result);
+      
+      safetyTimeoutCleared = true;
+      clearTimeout(safetyTimeout);
+      
       setAnalysisResult(result);
 
       // Guardar en historial (sin bloquear si falla)
       if (selectedImage) {
-        HistoryService.saveToHistory({
-          imageUri: selectedImage,
-          description: description,
-          extractedText: result.extractedText,
-          summary: result.summary,
-          label: result.label,
-        }).catch(() => {
+        try {
+          await HistoryService.saveToHistory({
+            imageUri: selectedImage,
+            description: description,
+            extractedText: result.extractedText,
+            summary: result.summary,
+            label: result.label,
+          });
+        } catch (historyError) {
           // Ignorar errores de historial para no bloquear la app
-        });
+        }
       }
 
+      setIsProcessing(false);
       setAppState(AppState.RESULTS);
     } catch (error) {
+      safetyTimeoutCleared = true;
+      clearTimeout(safetyTimeout);
+      console.error('=== Error en handleSend ===');
+      console.error('Error completo:', error);
+      if (error instanceof Error) {
+        console.error('Mensaje:', error.message);
+        console.error('Stack:', error.stack);
+      }
+      setIsProcessing(false);
       const errorMsg = error instanceof Error ? getErrorMessage(error) : 'Error desconocido al procesar el documento';
+      console.error('Mensaje de error para el usuario:', errorMsg);
       setErrorMessage(errorMsg);
       setAppState(AppState.ERROR);
     }
+  };
+
+  const handleCancelProcessing = () => {
+    console.log('Cancelando procesamiento...');
+    setIsProcessing(false);
+    setAppState(AppState.DESCRIPTION);
+    // No mostrar alerta para cancelación manual del usuario
   };
 
   const handleReset = () => {
@@ -178,18 +239,35 @@ export default function App() {
 
   const loadHistory = async () => {
     try {
+      console.log('Cargando historial...');
       // TODO: Obtener userId si tienes autenticación
       const userId = undefined; // Puedes obtener esto de tu sistema de autenticación
-      const historyData = await HistoryService.getHistory(userId);
+      
+      // Timeout de seguridad para cargar historial
+      const timeoutPromise = new Promise<HistoryItem[]>((resolve) => {
+        setTimeout(() => {
+          console.warn('Timeout cargando historial, usando array vacío');
+          resolve([]);
+        }, 3000); // 3 segundos máximo
+      });
+      
+      const historyPromise = HistoryService.getHistory(userId);
+      const historyData = await Promise.race([historyPromise, timeoutPromise]);
+      
       setHistory(historyData || []);
+      console.log('Historial cargado:', (historyData || []).length, 'elementos');
     } catch (error) {
+      console.error('Error cargando historial:', error);
       setHistory([]);
     }
   };
 
   useEffect(() => {
     if (appState === AppState.HISTORY) {
-      loadHistory();
+      loadHistory().catch((error) => {
+        console.error('Error en useEffect loadHistory:', error);
+        setHistory([]);
+      });
     }
   }, [appState]);
 
@@ -231,17 +309,34 @@ export default function App() {
     );
   };
 
-  const renderSplashScreen = () => (
-    <View style={styles.splashContainer}>
-      <Image
-        source={require('./main_logo.png')}
-        style={styles.splashLogo}
-        resizeMode="contain"
-      />
-      <Text style={styles.splashText}>Apunto</Text>
-      <Text style={styles.splashSubtext}>Análisis inteligente de apuntes escritos a mano</Text>
-    </View>
-  );
+  const renderSplashScreen = () => {
+    try {
+      return (
+        <View style={styles.splashContainer}>
+          <View style={styles.splashLogoContainer}>
+            <Image
+              source={require('./main_logo.png')}
+              style={styles.splashLogo}
+              resizeMode="contain"
+              onError={(error) => {
+                console.log('Error cargando logo:', error);
+              }}
+            />
+          </View>
+          <Text style={styles.splashText}>Apunto</Text>
+          <Text style={styles.splashSubtext}>Análisis inteligente de apuntes escritos a mano</Text>
+        </View>
+      );
+    } catch (error) {
+      // Si hay error con la imagen, mostrar solo texto
+      return (
+        <View style={styles.splashContainer}>
+          <Text style={styles.splashText}>Apunto</Text>
+          <Text style={styles.splashSubtext}>Análisis inteligente de apuntes escritos a mano</Text>
+        </View>
+      );
+    }
+  };
 
   const renderNavBar = (title: string, showBack: boolean = false, onBack?: () => void) => (
     <View style={styles.navBar}>
@@ -490,7 +585,7 @@ export default function App() {
 
   const renderProcessingScreen = () => (
     <View style={styles.screenContainer}>
-      {renderNavBar('Procesando', false)}
+      {renderNavBar('Procesando', true, handleCancelProcessing)}
       <View style={styles.processingContainer}>
         <Image
           source={require('./main_logo.png')}
@@ -504,6 +599,17 @@ export default function App() {
         <Text style={styles.processingSubtext}>
           Analizando con OCR y IA
         </Text>
+        <Text style={styles.processingSubtext}>
+          Esto puede tardar unos momentos
+        </Text>
+      </View>
+      <View style={styles.bottomActionBar}>
+        <TouchableOpacity
+          style={[styles.button, styles.secondaryButton, styles.bottomButton]}
+          onPress={handleCancelProcessing}
+        >
+          <Text style={[styles.buttonText, styles.secondaryButtonText]}>Cancelar</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -637,10 +743,12 @@ export default function App() {
     }
   };
 
+  const currentScreen = renderCurrentScreen();
+  
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="auto" />
-      {renderCurrentScreen()}
+      {currentScreen}
     </SafeAreaView>
   );
 }
@@ -746,10 +854,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 32,
   },
-  splashLogo: {
+  splashLogoContainer: {
     width: 200,
     height: 200,
     marginBottom: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  splashLogo: {
+    width: 200,
+    height: 200,
     backgroundColor: 'transparent',
   },
   splashText: {

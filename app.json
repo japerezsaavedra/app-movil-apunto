@@ -33,7 +33,12 @@
         "image": "./main_logo.png",
         "resizeMode": "contain",
         "backgroundColor": "#f8fafc"
-      }
+      },
+      "permissions": [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE"
+      ],
+      "usesCleartextTraffic": false
     },
     "plugins": [
       [
@@ -44,6 +49,14 @@
       ],
       "expo-asset"
     ],
-    "newArchEnabled": true
+    "newArchEnabled": false,
+    "updates": {
+      "enabled": false,
+      "fallbackToCacheTimeout": 0,
+      "checkAutomatically": "NEVER"
+    },
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    }
   }
 }

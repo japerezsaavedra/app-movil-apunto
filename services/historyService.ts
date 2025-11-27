@@ -41,11 +41,24 @@ export const getHistory = async (userId?: string): Promise<HistoryItem[]> => {
     }
     const data = await AsyncStorage.getItem(HISTORY_STORAGE_KEY);
     if (data) {
-      return JSON.parse(data);
+      try {
+        const parsed = JSON.parse(data);
+        // Validar que sea un array
+        if (Array.isArray(parsed)) {
+          return parsed;
+        } else {
+          // Si no es un array, limpiar y retornar vacío
+          await AsyncStorage.removeItem(HISTORY_STORAGE_KEY);
+          return [];
+        }
+      } catch (parseError) {
+        // Si hay error al parsear, limpiar el historial corrupto
+        await AsyncStorage.removeItem(HISTORY_STORAGE_KEY);
+        return [];
+      }
     }
     return [];
   } catch (error) {
-    console.error('Error obteniendo historial:', error);
     return [];
   }
 };
@@ -73,7 +86,7 @@ export const deleteHistoryItem = async (id: string, userId?: string): Promise<vo
     const filteredHistory = history.filter(item => item.id !== id);
     await AsyncStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(filteredHistory));
   } catch (error) {
-    console.error('Error eliminando historial:', error);
+    // Silenciar errores
   }
 };
 

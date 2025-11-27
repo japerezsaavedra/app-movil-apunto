@@ -236,17 +236,32 @@ PORT=3000
 CORS_ORIGIN=*
 ```
 
-### 2. App Móvil - Configuración
+### 2. App Móvil - Variables de Entorno
 
-En `services/apiService.ts`, configura la URL del backend:
+**IMPORTANTE**: La app móvil NO debe tener credenciales o URLs hardcodeadas. Todas las configuraciones deben estar en variables de entorno.
 
-```typescript
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
+Crea un archivo `.env` en la carpeta `mobile-app/` basándote en `.env.example`:
+
+```bash
+cp .env.example .env
+```
+
+Edita el archivo `.env` y configura la URL del backend:
+
+```env
+# URL del backend API
+# Para desarrollo local con emulador Android: http://10.0.2.2:3000/api
+# Para desarrollo local con dispositivo físico: http://TU_IP_LOCAL:3000/api
+# Para producción: https://tu-backend.azurewebsites.net/api
+EXPO_PUBLIC_API_URL=https://tu-backend.azurewebsites.net/api
 ```
 
 **Para desarrollo:**
 - **Emulador Android**: `http://10.0.2.2:3000/api`
 - **Dispositivo físico**: `http://TU_IP_LOCAL:3000/api` (reemplaza TU_IP_LOCAL con la IP de tu máquina)
+- **Producción**: `https://tu-backend.azurewebsites.net/api`
+
+**Nota**: Las variables de entorno en Expo deben tener el prefijo `EXPO_PUBLIC_` para ser accesibles en el código del cliente.
 - **iOS Simulator**: `http://localhost:3000/api`
 
 **Para producción:**

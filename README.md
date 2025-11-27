@@ -9,7 +9,7 @@ Aplicación móvil React Native que analiza documentos y apuntes de cualquier ti
 - ✅ Extracción de **conceptos principales** y temas tratados
 - ✅ Identificación de **materias académicas** y áreas de conocimiento
 - ✅ Análisis de documentos administrativos (facturas, recetas, citas, etc.)
-- ✅ **Historial persistente** con sincronización backend (PostgreSQL)
+- ✅ **Historial local** almacenado en el dispositivo (AsyncStorage)
 - ✅ **Detección de conectividad** y manejo robusto de errores de red
 - ✅ Interfaz intuitiva y fácil de usar con splash screen
 
@@ -23,11 +23,10 @@ Aplicación móvil React Native que analiza documentos y apuntes de cualquier ti
 │ 1. Tomar foto   │
 │ 2. Descripción  │
 │ 3. Historial    │
+│    (Local)      │
 └────────┬────────┘
          │
          │ POST /api/analyze
-         │ GET /api/history
-         │ DELETE /api/history/:id
          ▼
 ┌─────────────────┐
 │   Backend API   │
@@ -37,23 +36,22 @@ Aplicación móvil React Native que analiza documentos y apuntes de cualquier ti
 │ 1. Recibe img   │
 │ 2. OCR (Azure)  │
 │ 3. LLM (GPT-4o) │
-│ 4. PostgreSQL   │
 └────────┬────────┘
          │
          ├─────────────────┬─────────────────┐
          │                 │                 │
          ▼                 ▼                 ▼
-┌─────────────────┐  ┌─────────────────┐  ┌──────────┐
-│ Azure Document  │  │  Azure OpenAI   │  │PostgreSQL│
-│  Intelligence   │  │   (GPT-4o)      │  │ Database │
-│                 │  │                 │  │          │
-│ - OCR           │  │ - Análisis      │  │- History │
-│ - Extracción    │  │ - Resumen       │  │- Users   │
-│   de texto      │  │ - Etiquetas     │  │          │
-│ - Ecuaciones    │  │ - Conceptos     │  │          │
-│   escritas      │  │ - Entidades     │  │          │
-│   a mano        │  │ - Materias      │  │          │
-└─────────────────┘  └─────────────────┘  └──────────┘
+┌─────────────────┐  ┌─────────────────┐  ┌──────────────┐
+│ Azure Document  │  │  Azure OpenAI   │  │ AsyncStorage │
+│  Intelligence   │  │   (GPT-4o)      │  │  (App Local) │
+│                 │  │                 │  │              │
+│ - OCR           │  │ - Análisis      │  │- Historial   │
+│ - Extracción    │  │ - Resumen       │  │  Local       │
+│   de texto      │  │ - Etiquetas     │  │              │
+│ - Ecuaciones    │  │ - Conceptos     │  │              │
+│   escritas      │  │ - Entidades     │  │              │
+│   a mano        │  │ - Materias      │  │              │
+└─────────────────┘  └─────────────────┘  └──────────────┘
 ```
 
 ## Flujo Completo
@@ -83,7 +81,6 @@ Aplicación móvil React Native que analiza documentos y apuntes de cualquier ti
      - Extrae entidades estructuradas (fechas, nombres, conceptos, etc.)
      - Genera puntos clave del documento
      - Crea resumen comprensivo
-   - **Paso 3 - Persistencia**: Guarda el análisis en PostgreSQL
    - Retorna resultado completo a la app móvil
 
 ### 3. **App Móvil (Resultado)**
@@ -96,8 +93,7 @@ Aplicación móvil React Native que analiza documentos y apuntes de cualquier ti
      - Comprensión del documento
    - Muestra texto extraído (OCR)
    - Muestra resumen completo
-   - Guarda en historial local (AsyncStorage) como respaldo
-   - Sincroniza con backend para historial persistente
+   - Guarda en historial local (AsyncStorage) para acceso offline
 
 ## Tipos de Documentos Soportados
 
@@ -140,13 +136,10 @@ El sistema puede analizar apuntes de **cualquier materia**:
 - **TypeScript**
 - **dotenv**: Variables de entorno
 - **cors**: Configuración CORS
-- **pg**: Cliente PostgreSQL para persistencia de datos
-- **multer**: Manejo de uploads de imágenes
 
 **Toda la lógica de conexión a servicios de Azure está en el backend:**
 - El backend se conecta a **Azure Document Intelligence** para OCR
 - El backend se conecta a **Azure OpenAI (GPT-4o)** para análisis de texto
-- El backend gestiona la persistencia en **PostgreSQL**
 - La app móvil solo envía imágenes y recibe resultados
 
 ### Servicios Azure (usados por el backend)
@@ -162,11 +155,11 @@ El sistema puede analizar apuntes de **cualquier materia**:
   - Capaz de analizar apuntes de cualquier materia
   - Respuestas siempre en español
 
-### Base de Datos
-- **PostgreSQL**: Almacenamiento persistente del historial
-  - Tablas: `users`, `analysis_history`
-  - Soporte para conexiones cloud (Supabase, Neon, etc.)
-  - SSL habilitado para producción
+### Almacenamiento Local (App Móvil)
+- **AsyncStorage**: Almacenamiento local del historial en el dispositivo
+  - El historial se guarda únicamente en el dispositivo
+  - No requiere conexión a internet para acceder al historial
+  - Los datos se mantienen entre sesiones de la app
 
 ## Estructura del Proyecto
 
@@ -183,7 +176,9 @@ mobile-app/
 │   │                          # - deleteHistoryItem()
 │   │                          # - clearHistory()
 ├── main_logo.png              # Logo de la aplicación
-├── app.json                   # Configuración de Expo
+├── app.json                   # Configuración básica de Expo
+├── app.config.js              # Configuración avanzada de Expo (updates, newArch)
+├── .env.example               # Ejemplo de variables de entorno
 ├── package.json               # Dependencias del proyecto
 ├── tsconfig.json              # Configuración de TypeScript
 └── README.md
@@ -192,13 +187,10 @@ backend/
 ├── src/
 │   ├── server.ts              # Servidor Express principal
 │   ├── routes/
-│   │   ├── analyze.ts         # POST /api/analyze
-│   │   └── history.ts         # GET /api/history, DELETE /api/history/:id
+│   │   └── analyze.ts         # POST /api/analyze
 │   ├── services/
 │   │   ├── ocrService.ts          # Azure Document Intelligence
-│   │   ├── azureOpenAIService.ts  # Azure OpenAI (GPT-4o)
-│   │   ├── database.ts            # Conexión a PostgreSQL
-│   │   └── historyService.ts      # CRUD de historial en DB
+│   │   └── azureOpenAIService.ts  # Azure OpenAI (GPT-4o)
 │   └── utils/
 │       └── imageConverter.ts   # Utilidades para imágenes
 ├── package.json
@@ -212,29 +204,16 @@ backend/
 
 ### 1. Backend - Variables de Entorno
 
-Crea un archivo `.env` en la carpeta `backend/`:
+Ver `backend/env.example` y `backend/README.md` para la configuración completa del backend.
 
-```env
-# Azure Document Intelligence (OCR)
-# Región recomendada: East US 2 (compatible con suscripciones Student)
-AZURE_DOC_ENDPOINT=https://tu-instancia.cognitiveservices.azure.com/
-AZURE_DOC_KEY=tu-clave-de-document-intelligence
-
-# Azure OpenAI (LLM - GPT-4o via Foundry)
-# Región recomendada: East US 2 (compatible con suscripciones Student)
-AZURE_OPENAI_ENDPOINT=https://tu-instancia.services.ai.azure.com/
-AZURE_OPENAI_KEY=tu-clave-de-openai
-AZURE_OPENAI_DEPLOYMENT=gpt-4o
-
-# PostgreSQL Database (para historial)
-# Formato: postgresql://usuario:password@host:puerto/database
-DATABASE_URL=postgresql://usuario:password@host:puerto/database
-DATABASE_SSL=false  # true para conexiones cloud (Supabase, Neon, etc.)
-
-# Servidor
-PORT=3000
-CORS_ORIGIN=*
-```
+**Variables principales requeridas:**
+- `AZURE_DOC_ENDPOINT`: Endpoint de Azure Document Intelligence
+- `AZURE_DOC_KEY`: Clave de Azure Document Intelligence
+- `AZURE_OPENAI_ENDPOINT`: Endpoint de Azure OpenAI
+- `AZURE_OPENAI_KEY`: Clave de Azure OpenAI
+- `AZURE_OPENAI_DEPLOYMENT`: Nombre del deployment (ej: `gpt-4o`)
+- `PORT`: Puerto del servidor (default: 3000)
+- `CORS_ORIGIN`: Origen permitido para CORS
 
 ### 2. App Móvil - Variables de Entorno
 
@@ -243,13 +222,14 @@ CORS_ORIGIN=*
 Crea un archivo `.env` en la carpeta `mobile-app/` basándote en `.env.example`:
 
 ```bash
+cd mobile-app
 cp .env.example .env
 ```
 
 Edita el archivo `.env` y configura la URL del backend:
 
 ```env
-# URL del backend API
+# URL del backend API (REQUERIDA)
 # Para desarrollo local con emulador Android: http://10.0.2.2:3000/api
 # Para desarrollo local con dispositivo físico: http://TU_IP_LOCAL:3000/api
 # Para producción: https://tu-backend.azurewebsites.net/api
@@ -258,16 +238,16 @@ EXPO_PUBLIC_API_URL=https://tu-backend.azurewebsites.net/api
 
 **Para desarrollo:**
 - **Emulador Android**: `http://10.0.2.2:3000/api`
-- **Dispositivo físico**: `http://TU_IP_LOCAL:3000/api` (reemplaza TU_IP_LOCAL con la IP de tu máquina)
-- **Producción**: `https://tu-backend.azurewebsites.net/api`
-
-**Nota**: Las variables de entorno en Expo deben tener el prefijo `EXPO_PUBLIC_` para ser accesibles en el código del cliente.
+- **Dispositivo físico**: `http://TU_IP_LOCAL:3000/api` (reemplaza `TU_IP_LOCAL` con la IP de tu máquina)
 - **iOS Simulator**: `http://localhost:3000/api`
 
 **Para producción:**
-```typescript
-const API_BASE_URL = 'https://apunto-backend.azurewebsites.net/api';
-```
+- Usa la URL completa de tu Azure App Service: `https://tu-backend.azurewebsites.net/api`
+
+**Nota importante**: 
+- Las variables de entorno en Expo deben tener el prefijo `EXPO_PUBLIC_` para ser accesibles en el código del cliente.
+- Si `EXPO_PUBLIC_API_URL` no está configurada, la app lanzará un error al iniciar.
+- **NUNCA** hardcodees URLs o credenciales directamente en el código.
 
 ## Instalación y Ejecución
 
@@ -286,10 +266,29 @@ npm start    # Producción (requiere build previo)
 ```bash
 cd mobile-app
 npm install
+
+# Configurar variables de entorno
+cp .env.example .env
+# Editar .env y configurar EXPO_PUBLIC_API_URL
+
 npm start    # Inicia Expo Dev Server
 npm run android  # Ejecuta en Android
 npm run ios      # Ejecuta en iOS
 ```
+
+**Nota importante**: 
+- La app requiere que `EXPO_PUBLIC_API_URL` esté configurada en `.env` antes de iniciar.
+- Si cambias las variables de entorno, reinicia el servidor de Expo.
+
+### Configuración de Expo
+
+La app está configurada con las siguientes optimizaciones para dispositivos físicos:
+
+- **React Native New Architecture**: Deshabilitada (`newArchEnabled: false`) para compatibilidad con Android 14
+- **Expo Updates**: Completamente deshabilitado para evitar problemas de sincronización
+- **Permisos Android**: `INTERNET` y `ACCESS_NETWORK_STATE` configurados
+
+Estas configuraciones están en `app.config.js` y `app.json`.
 
 ## API Endpoints del Backend
 
@@ -355,52 +354,7 @@ Analiza un documento usando OCR y LLM.
 }
 ```
 
-### GET `/api/history`
-
-Obtiene el historial de análisis del usuario.
-
-**Headers:**
-- `x-user-id` (opcional): ID del usuario
-
-**Query Parameters:**
-- `limit` (opcional, default: 50): Número de resultados
-- `offset` (opcional, default: 0): Offset para paginación
-
-**Response:**
-```json
-{
-  "history": [
-    {
-      "id": "123",
-      "imageUri": "...",
-      "description": "Apunte de historia",
-      "extractedText": "...",
-      "summary": "...",
-      "label": "Apunte de Historia",
-      "timestamp": "2024-11-25T19:00:00.000Z"
-    }
-  ],
-  "pagination": {
-    "limit": 50,
-    "offset": 0,
-    "total": 1
-  }
-}
-```
-
-### DELETE `/api/history/:id`
-
-Elimina un elemento del historial.
-
-**Headers:**
-- `x-user-id` (opcional): ID del usuario
-
-**Response:**
-```json
-{
-  "message": "Análisis eliminado correctamente"
-}
-```
+**Nota**: El backend solo proporciona el endpoint `/api/analyze`. El historial se gestiona completamente en la app móvil usando AsyncStorage.
 
 ## Características de la App
 
@@ -413,8 +367,7 @@ Elimina un elemento del historial.
 - ✅ **Manejo robusto de errores** de red (timeout, sin internet, servidor no disponible)
 - ✅ Análisis completo del documento o apunte
 - ✅ Visualización de información estructurada
-- ✅ **Historial persistente** sincronizado con backend
-- ✅ **Historial local** como respaldo (AsyncStorage)
+- ✅ **Historial local** almacenado en AsyncStorage (sin sincronización con backend)
 - ✅ Eliminación de elementos del historial
 - ✅ **Navegación inferior** (Bottom Navigation) entre Inicio e Historial
 
@@ -440,6 +393,23 @@ Elimina un elemento del historial.
 - **Texto Extraído**: Texto completo extraído por OCR
 - **Resumen**: Resumen comprensivo del documento
 
+### Historial Local
+
+El historial se almacena completamente en el dispositivo usando **AsyncStorage**:
+
+- ✅ **Almacenamiento local**: Los análisis se guardan en el dispositivo
+- ✅ **Acceso offline**: Puedes ver el historial sin conexión a internet
+- ✅ **Persistencia**: Los datos se mantienen entre sesiones de la app
+- ✅ **Privacidad**: El historial nunca se transmite al backend
+- ⚠️ **Limitación**: Si desinstalas la app o limpias los datos, se perderá el historial
+
+**Funciones disponibles:**
+- Ver historial completo
+- Eliminar elementos individuales
+- Limpiar todo el historial
+
+**Nota**: El historial NO se sincroniza con ningún servidor. Es completamente local al dispositivo.
+
 ### Manejo de Errores
 La app detecta y muestra mensajes específicos para:
 - **NO_INTERNET**: Sin conexión a internet
@@ -450,13 +420,15 @@ La app detecta y muestra mensajes específicos para:
 
 ## Seguridad
 
-- API keys almacenadas en variables de entorno (backend)
+- **API keys almacenadas en variables de entorno** (backend)
+- **URLs del backend en variables de entorno** (app móvil)
+- **NO hardcodear credenciales o URLs** en el código
 - Validación de entrada en el backend
 - CORS configurado
 - NO exponer API keys en el código del cliente
 - Las imágenes se envían al backend, nunca directamente a servicios externos
-- Conexión SSL a PostgreSQL en producción
 - Service Principal para despliegue en Azure (no credenciales básicas)
+- El historial se almacena localmente en el dispositivo (no se transmite al backend)
 
 ## Despliegue
 
@@ -477,9 +449,8 @@ El backend se puede desplegar en Azure App Service usando GitHub Actions. Ver `b
 - `AZURE_OPENAI_ENDPOINT`
 - `AZURE_OPENAI_KEY`
 - `AZURE_OPENAI_DEPLOYMENT`
-- `DATABASE_URL`
-- `DATABASE_SSL=true`
 - `CORS_ORIGIN`
+- `PORT` (opcional, default: 3000)
 
 ### App Móvil
 
@@ -509,9 +480,11 @@ La app móvil se puede distribuir mediante:
 ## Testing
 
 ### Desarrollo Local
-1. Iniciar backend: `cd backend && npm run dev`
-2. Iniciar app móvil: `cd mobile-app && npm start`
-3. Configurar URL del backend en `apiService.ts`
+1. Configurar variables de entorno:
+   - Backend: Crear `.env` en `backend/` basándote en `env.example`
+   - App móvil: Crear `.env` en `mobile-app/` con `EXPO_PUBLIC_API_URL`
+2. Iniciar backend: `cd backend && npm run dev`
+3. Iniciar app móvil: `cd mobile-app && npm start`
 
 ### Emulador Android
 - URL: `http://10.0.2.2:3000/api` (localhost del host)
@@ -536,10 +509,11 @@ La app móvil se puede distribuir mediante:
 - Verificar que `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_KEY` y `AZURE_OPENAI_DEPLOYMENT` estén configurados
 - Verificar que las credenciales sean válidas en el Portal de Azure
 
-### Error: Database connection failed
-- Verificar que `DATABASE_URL` esté correctamente configurado
-- Asegúrate de que `DATABASE_SSL=true` para conexiones cloud
-- Verificar que el firewall de PostgreSQL permita conexiones desde tu IP/Azure
+### Error: EXPO_PUBLIC_API_URL no está configurada
+- Verificar que el archivo `.env` exista en `mobile-app/`
+- Verificar que `EXPO_PUBLIC_API_URL` esté definida en `.env`
+- Reiniciar el servidor de Expo después de modificar `.env`
+- Verificar que la URL del backend sea correcta y accesible
 
 ### Error: Imagen no se procesa
 - Verificar formato de imagen (JPEG, PNG)
@@ -550,10 +524,13 @@ La app móvil se puede distribuir mediante:
 
 ### Error: No se puede conectar al backend
 - Verificar que el backend esté corriendo
-- Verificar la URL en `apiService.ts`
+- Verificar que `EXPO_PUBLIC_API_URL` esté correctamente configurada en `.env`
+- Verificar que la URL sea accesible desde tu dispositivo/emulador
 - Verificar que el puerto sea correcto (3000 por defecto)
 - En dispositivo físico, usar IP de la máquina, no localhost
+- En emulador Android, usar `http://10.0.2.2:3000/api`
 - Verificar conectividad de red
+- Verificar que CORS esté configurado correctamente en el backend
 
 ### Error: Timeout
 - Verificar conexión a internet
@@ -588,13 +565,15 @@ La app móvil se puede distribuir mediante:
 3. ✅ Eliminados todos los mockups
 4. ✅ Soporte para apuntes de cualquier materia
 5. ✅ Detección de ecuaciones escritas a mano
-6. ✅ Historial persistente con PostgreSQL
+6. ✅ Historial local con AsyncStorage (sin base de datos)
 7. ✅ Manejo robusto de errores de red
 8. ✅ Despliegue automatizado en Azure
-9. ⏳ Testing completo end-to-end
-10. ⏳ Optimización de rendimiento
-11. ⏳ Autenticación de usuarios
-12. ⏳ Build de producción para App Store/Google Play
+9. ✅ Variables de entorno para configuración (sin hardcodeo)
+10. ✅ Configuración de Expo optimizada para dispositivos físicos
+11. ⏳ Testing completo end-to-end
+12. ⏳ Optimización de rendimiento
+13. ⏳ Autenticación de usuarios
+14. ⏳ Build de producción para App Store/Google Play
 
 ## Recursos
 
@@ -602,7 +581,7 @@ La app móvil se puede distribuir mediante:
 - [Azure OpenAI Docs](https://learn.microsoft.com/azure/ai-services/openai/)
 - [React Native Expo Docs](https://docs.expo.dev/)
 - [Portal de Azure](https://portal.azure.com)
-- [PostgreSQL Docs](https://www.postgresql.org/docs/)
+- [AsyncStorage Docs](https://react-native-async-storage.github.io/async-storage/)
 - [Expo Application Services (EAS)](https://docs.expo.dev/eas/)
 
 ## Licencia

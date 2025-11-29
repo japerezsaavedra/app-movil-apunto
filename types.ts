@@ -28,5 +28,11 @@ export interface HistoryItem {
   summary: string;
   label: string;
   timestamp: number;
+  // Campos editables
+  editedExtractedText?: string;  // Texto OCR editado por el usuario
+  editedSummary?: string;        // Resumen editado por el usuario
+  isEdited?: boolean;            // Indica si el usuario editó el contenido
+  // Feedback del usuario
+  liked?: boolean | null;        // true = me gusta, false = no me gusta, null = sin feedback
 }
 

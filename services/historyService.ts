@@ -90,3 +90,39 @@ export const deleteHistoryItem = async (id: string, userId?: string): Promise<vo
   }
 };
 
+/**
+ * Actualiza un elemento del historial con ediciones y feedback
+ */
+export const updateHistoryItem = async (
+  id: string,
+  updates: {
+    editedExtractedText?: string;
+    editedSummary?: string;
+    liked?: boolean | null;
+  }
+): Promise<void> => {
+  try {
+    if (!(await isAsyncStorageAvailable())) {
+      return;
+    }
+    const history = await getHistory();
+    const updatedHistory = history.map(item => {
+      if (item.id === id) {
+        const isEdited = !!(
+          (updates.editedExtractedText && updates.editedExtractedText !== item.extractedText) ||
+          (updates.editedSummary && updates.editedSummary !== item.summary)
+        );
+        return {
+          ...item,
+          ...updates,
+          isEdited: isEdited || item.isEdited,
+        };
+      }
+      return item;
+    });
+    await AsyncStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(updatedHistory));
+  } catch (error) {
+    // Silenciar errores
+  }
+};
+

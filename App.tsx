@@ -33,9 +33,31 @@ export default function App() {
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<HistoryItem | null>(null);
   const [showSplash, setShowSplash] = useState<boolean>(true);
   const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Estados para edición y feedback
+  const [editedExtractedText, setEditedExtractedText] = useState<string>('');
+  const [editedSummary, setEditedSummary] = useState<string>('');
+  const [liked, setLiked] = useState<boolean | null>(null);
+  const [currentHistoryId, setCurrentHistoryId] = useState<string | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
-  // Mostrar splash screen al iniciar
+  // Verificar configuración al iniciar
   useEffect(() => {
+    // Verificar que la variable de entorno esté configurada
+    const apiUrl = process.env.EXPO_PUBLIC_API_URL;
+    if (!apiUrl || apiUrl === 'NOT_CONFIGURED') {
+      const configError = 
+        'ERROR: La URL del backend no está configurada.\n\n' +
+        'Por favor, configura EXPO_PUBLIC_API_URL:\n' +
+        '- Desarrollo: archivo .env\n' +
+        '- Producción: eas secret:create --scope project --name EXPO_PUBLIC_API_URL --value "URL"';
+      console.error(configError);
+      setErrorMessage(configError);
+      setAppState(AppState.ERROR);
+      setShowSplash(false);
+      return;
+    }
+
     // Timeout simple: ocultar splash después de 1.5 segundos
     const timer = setTimeout(() => {
       setShowSplash(false);
@@ -187,7 +209,7 @@ export default function App() {
       
       setAnalysisResult(result);
 
-      // Guardar en historial (sin bloquear si falla)
+      // Guardar en historial primero para obtener el ID
       if (selectedImage) {
         try {
           await HistoryService.saveToHistory({
@@ -197,10 +219,22 @@ export default function App() {
             summary: result.summary,
             label: result.label,
           });
+          // Recargar historial para obtener el ID correcto
+          const updatedHistory = await HistoryService.getHistory();
+          const latestItem = updatedHistory[0];
+          if (latestItem) {
+            setCurrentHistoryId(latestItem.id);
+          }
         } catch (historyError) {
           // Ignorar errores de historial para no bloquear la app
         }
       }
+
+      // Inicializar estados de edición con los valores originales
+      setEditedExtractedText(result.extractedText);
+      setEditedSummary(result.summary);
+      setLiked(null);
+      setHasUnsavedChanges(false);
 
       setIsProcessing(false);
       setAppState(AppState.RESULTS);
@@ -234,6 +268,12 @@ export default function App() {
     setAnalysisResult(null);
     setErrorMessage('');
     setSelectedHistoryItem(null);
+    // Limpiar estados de edición y feedback
+    setEditedExtractedText('');
+    setEditedSummary('');
+    setLiked(null);
+    setCurrentHistoryId(null);
+    setHasUnsavedChanges(false);
     setAppState(AppState.CAMERA);
   };
 
@@ -277,13 +317,83 @@ export default function App() {
 
   const handleViewHistoryItem = (item: HistoryItem) => {
     setSelectedHistoryItem(item);
+    setSelectedImage(item.imageUri);
+    setDescription(item.description);
+    // Usar texto editado si existe, sino el original
+    const displayExtractedText = item.editedExtractedText || item.extractedText;
+    const displaySummary = item.editedSummary || item.summary;
     setAnalysisResult({
-      extractedText: item.extractedText,
-      summary: item.summary,
+      extractedText: item.extractedText, // Mantener el original para comparar cambios
+      summary: item.summary, // Mantener el original para comparar cambios
       label: item.label,
     });
+    // Inicializar estados de edición con valores del historial (o editados si existen)
+    setEditedExtractedText(displayExtractedText);
+    setEditedSummary(displaySummary);
+    setLiked(item.liked !== undefined ? item.liked : null);
+    setCurrentHistoryId(item.id);
+    setHasUnsavedChanges(false);
     setAppState(AppState.RESULTS);
   };
+
+  // Función para guardar cambios (ediciones y feedback)
+  const handleSaveChanges = async () => {
+    if (!currentHistoryId) {
+      Alert.alert('Error', 'No se pudo identificar el elemento del historial');
+      return;
+    }
+
+    try {
+      await HistoryService.updateHistoryItem(currentHistoryId, {
+        editedExtractedText: editedExtractedText !== analysisResult?.extractedText ? editedExtractedText : undefined,
+        editedSummary: editedSummary !== analysisResult?.summary ? editedSummary : undefined,
+        liked: liked,
+      });
+      
+      setHasUnsavedChanges(false);
+      Alert.alert('Éxito', 'Cambios guardados correctamente');
+      
+      // Recargar historial para reflejar cambios
+      const updatedHistory = await HistoryService.getHistory();
+      setHistory(updatedHistory);
+    } catch (error) {
+      console.error('Error guardando cambios:', error);
+      Alert.alert('Error', 'No se pudieron guardar los cambios');
+    }
+  };
+
+  // Función para manejar me gusta/no me gusta
+  const handleLike = async (likedValue: boolean) => {
+    const newLikedValue = liked === likedValue ? null : likedValue;
+    setLiked(newLikedValue);
+    setHasUnsavedChanges(true);
+    
+    // Guardar automáticamente el feedback
+    if (currentHistoryId) {
+      try {
+        await HistoryService.updateHistoryItem(currentHistoryId, {
+          liked: newLikedValue,
+        });
+        setHasUnsavedChanges(false);
+        
+        // Recargar historial
+        const updatedHistory = await HistoryService.getHistory();
+        setHistory(updatedHistory);
+      } catch (error) {
+        console.error('Error guardando feedback:', error);
+      }
+    }
+  };
+
+  // Detectar cambios en los campos editables
+  useEffect(() => {
+    if (analysisResult) {
+      const hasChanges = 
+        editedExtractedText !== analysisResult.extractedText ||
+        editedSummary !== analysisResult.summary;
+      setHasUnsavedChanges(hasChanges);
+    }
+  }, [editedExtractedText, editedSummary, analysisResult]);
 
   const handleDeleteHistoryItem = async (id: string) => {
     Alert.alert(
@@ -555,16 +665,85 @@ export default function App() {
 
             <View style={styles.resultSection}>
               <Text style={styles.sectionTitle}>Texto Extraído (OCR)</Text>
-              <View style={styles.resultBox}>
-                <Text style={styles.resultText}>{analysisResult.extractedText}</Text>
-              </View>
+              <TextInput
+                style={[styles.resultBox, styles.editableTextInput]}
+                value={editedExtractedText}
+                onChangeText={setEditedExtractedText}
+                multiline
+                textAlignVertical="top"
+                placeholder="Texto extraído por OCR..."
+                placeholderTextColor="#94a3b8"
+              />
             </View>
 
             <View style={styles.resultSection}>
               <Text style={styles.sectionTitle}>Resumen Completo</Text>
-              <View style={styles.resultBox}>
-                <Text style={styles.resultText}>{analysisResult.summary}</Text>
+              <TextInput
+                style={[styles.resultBox, styles.editableTextInput]}
+                value={editedSummary}
+                onChangeText={setEditedSummary}
+                multiline
+                textAlignVertical="top"
+                placeholder="Resumen del análisis..."
+                placeholderTextColor="#94a3b8"
+              />
+            </View>
+
+            {/* Botones de feedback y guardar */}
+            <View style={styles.feedbackSection}>
+              <View style={styles.feedbackButtonsContainer}>
+                <TouchableOpacity
+                  style={[
+                    styles.feedbackButton,
+                    liked === true && styles.feedbackButtonActive,
+                    liked === true && styles.feedbackButtonLiked
+                  ]}
+                  onPress={() => handleLike(true)}
+                >
+                  <MaterialIcons 
+                    name="thumb-up" 
+                    size={24} 
+                    color={liked === true ? "#ffffff" : "#64748b"} 
+                  />
+                  <Text style={[
+                    styles.feedbackButtonText,
+                    liked === true && styles.feedbackButtonTextActive
+                  ]}>
+                    Me gusta
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.feedbackButton,
+                    liked === false && styles.feedbackButtonActive,
+                    liked === false && styles.feedbackButtonDisliked
+                  ]}
+                  onPress={() => handleLike(false)}
+                >
+                  <MaterialIcons 
+                    name="thumb-down" 
+                    size={24} 
+                    color={liked === false ? "#ffffff" : "#64748b"} 
+                  />
+                  <Text style={[
+                    styles.feedbackButtonText,
+                    liked === false && styles.feedbackButtonTextActive
+                  ]}>
+                    No me gusta
+                  </Text>
+                </TouchableOpacity>
               </View>
+
+              {hasUnsavedChanges && (
+                <TouchableOpacity
+                  style={[styles.button, styles.primaryButton, styles.saveButton]}
+                  onPress={handleSaveChanges}
+                >
+                  <MaterialIcons name="save" size={20} color="#ffffff" style={styles.buttonIcon} />
+                  <Text style={styles.buttonText}>Guardar Cambios</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </>
         )}
@@ -650,12 +829,34 @@ export default function App() {
                 </TouchableOpacity>
               </View>
 
+              {/* Indicadores de edición y feedback */}
+              <View style={styles.historyItemIndicators}>
+                {item.isEdited && (
+                  <View style={styles.indicatorBadge}>
+                    <MaterialIcons name="edit" size={14} color="#7c3aed" />
+                    <Text style={styles.indicatorText}>Editado</Text>
+                  </View>
+                )}
+                {item.liked === true && (
+                  <View style={[styles.indicatorBadge, styles.indicatorLiked]}>
+                    <MaterialIcons name="thumb-up" size={14} color="#10b981" />
+                    <Text style={[styles.indicatorText, styles.indicatorTextLiked]}>Me gusta</Text>
+                  </View>
+                )}
+                {item.liked === false && (
+                  <View style={[styles.indicatorBadge, styles.indicatorDisliked]}>
+                    <MaterialIcons name="thumb-down" size={14} color="#ef4444" />
+                    <Text style={[styles.indicatorText, styles.indicatorTextDisliked]}>No me gusta</Text>
+                  </View>
+                )}
+              </View>
+
               <Text style={styles.historyItemDescription} numberOfLines={1}>
                 {item.description}
               </Text>
 
               <Text style={styles.historyItemSummary} numberOfLines={2}>
-                {item.summary}
+                {item.editedSummary || item.summary}
               </Text>
 
               <Text style={styles.historyItemDate}>
@@ -1109,6 +1310,38 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#94a3b8',
   },
+  historyItemIndicators: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 8,
+  },
+  indicatorBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  indicatorLiked: {
+    backgroundColor: '#d1fae5',
+  },
+  indicatorDisliked: {
+    backgroundColor: '#fee2e2',
+  },
+  indicatorText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  indicatorTextLiked: {
+    color: '#10b981',
+  },
+  indicatorTextDisliked: {
+    color: '#ef4444',
+  },
   processingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -1243,6 +1476,59 @@ const styles = StyleSheet.create({
     color: '#334155',
     fontSize: 14,
     lineHeight: 20,
+  },
+  editableTextInput: {
+    minHeight: 100,
+    color: '#334155',
+    fontSize: 14,
+    lineHeight: 20,
+    padding: 12,
+  },
+  feedbackSection: {
+    marginTop: 8,
+    marginBottom: 16,
+    gap: 12,
+  },
+  feedbackButtonsContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'center',
+  },
+  feedbackButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#ffffff',
+    minWidth: 120,
+  },
+  feedbackButtonActive: {
+    borderWidth: 2,
+  },
+  feedbackButtonLiked: {
+    backgroundColor: '#10b981',
+    borderColor: '#10b981',
+  },
+  feedbackButtonDisliked: {
+    backgroundColor: '#ef4444',
+    borderColor: '#ef4444',
+  },
+  feedbackButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  feedbackButtonTextActive: {
+    color: '#ffffff',
+  },
+  saveButton: {
+    marginTop: 8,
+    alignSelf: 'stretch',
   },
   tagsContainer: {
     flexDirection: 'row',

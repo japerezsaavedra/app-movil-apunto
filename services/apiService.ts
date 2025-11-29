@@ -4,14 +4,34 @@ import { AnalysisResult } from '../types';
 
 // URL del backend - debe configurarse mediante variable de entorno EXPO_PUBLIC_API_URL
 // Ver .env.example para más información
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
+// En producción, debe configurarse en EAS Build usando: eas secret:create --scope project --name EXPO_PUBLIC_API_URL --value "https://..."
+let API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
+// Validación suave: no lanzar error al importar, validar al usar
 if (!API_BASE_URL) {
-  throw new Error(
-    'EXPO_PUBLIC_API_URL no está configurada. Por favor, crea un archivo .env con EXPO_PUBLIC_API_URL configurada. ' +
-    'Ver .env.example para más información.'
-  );
+  console.error('⚠️ ADVERTENCIA: EXPO_PUBLIC_API_URL no está configurada');
+  console.error('Para desarrollo: crea un archivo .env con EXPO_PUBLIC_API_URL');
+  console.error('Para producción: configura la variable en EAS Build usando: eas secret:create');
+  // Usar un valor placeholder que será detectado cuando se intente usar
+  API_BASE_URL = 'NOT_CONFIGURED';
 }
+
+/**
+ * Obtiene la URL base de la API, validando que esté configurada
+ * @throws Error si la URL no está configurada
+ */
+const getApiBaseUrl = (): string => {
+  if (!API_BASE_URL || API_BASE_URL === 'NOT_CONFIGURED') {
+    const errorMsg = 
+      'ERROR: La URL del backend no está configurada.\n\n' +
+      'Por favor, configura EXPO_PUBLIC_API_URL:\n' +
+      '- Desarrollo: archivo .env\n' +
+      '- Producción: eas secret:create --scope project --name EXPO_PUBLIC_API_URL --value "URL"';
+    console.error(errorMsg);
+    throw new Error(errorMsg);
+  }
+  return API_BASE_URL;
+};
 
 /**
  * Verifica si hay conexión a internet
@@ -114,7 +134,7 @@ export const analyzeDocument = async (
     const imageBase64 = await imageUriToBase64(imageUri);
 
     // Log para debugging
-    const requestUrl = `${API_BASE_URL}/analyze`;
+    const requestUrl = `${getApiBaseUrl()}/analyze`;
     console.log('=== Iniciando análisis ===');
     console.log('URL del backend:', requestUrl);
     console.log('Descripción:', description.trim());
